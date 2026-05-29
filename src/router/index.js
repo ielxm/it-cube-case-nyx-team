@@ -1,23 +1,21 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
+
+const routes = [
+  { path: '/',                          component: () => import('../pages/HomePage.vue') },
+  { path: '/signup',                    component: () => import('../pages/SignupPage.vue') },
+  { path: '/events/:slug',              component: () => import('../pages/EventPage.vue') },
+  { path: '/events/:slug/register',     component: () => import('../pages/RegisterPage.vue') },
+  { path: '/login',                     component: () => import('../pages/LoginPage.vue') },
+  { path: '/dashboard',                 component: () => import('../pages/DashboardPage.vue') },
+  { path: '/admin/login',               component: () => import('../pages/AdminLoginPage.vue') },
+  { path: '/admin/2fa',                 component: () => import('../pages/Admin2FAPage.vue') },
+  { path: '/admin/dashboard',           component: () => import('../pages/AdminDashboardPage.vue') },
+]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: '/',
-      name: 'home',
-      component: HomeView,
-    },
-    {
-      path: '/about',
-      name: 'about',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
-      component: () => import('../views/AboutView.vue'),
-    },
-  ],
+  history: createWebHistory(),
+  routes,
+  scrollBehavior: () => ({ top: 0 }),
 })
 
 export default router
