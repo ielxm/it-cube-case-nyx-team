@@ -1,4 +1,4 @@
-# it-cube-case-frontend-nyx-team
+# it-cube-case-backend-nyx-team
 
 # Project Setup
 
@@ -27,9 +27,9 @@ uvicorn main:app --reload
 ## Podman (recommended)
 
 ```shell
-podman build -t it-cube-case-frontend-nyx-team .
+podman build -t it-cube-case-backend-nyx-team .
 ```
 
 ```shell
-podman run -it --rm -p 8000:8000 it-cube-case-frontend-nyx-team
+podman run -it --rm -p 8000:8000 it-cube-case-backend-nyx-team
 ```
