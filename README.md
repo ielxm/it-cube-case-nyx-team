@@ -1,7 +1,7 @@
 # it-cube-case-nyx-team
 
 Учебная практика 2025-2026 г.
-<br>Кейсовое задания IT-Cube.
+<br>Кейсовое задание IT-Cube.
 
 Роли:
 - [leestmi](https://github.com/leestmi) (Михаил К.) - frontend, презентация, отчёты
