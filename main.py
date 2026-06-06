@@ -135,13 +135,17 @@ class EventCreate(BaseModel):
     slug: str
     description: str | None = None
     location: str = "IT Cube"
-    is_active: int = 1
+    status: str = "planned"        # 'planned' | 'active' | 'inactive'
+    start_date: str | None = None  # YYYY-MM-DD, shown for planned events
 
 class CaseCreate(BaseModel):
     event_id: int
     title: str
     description: str | None = None
     limit_teams: int = 8
+
+class NewsCreate(BaseModel):
+    text: str
 
 @app.on_event("startup")
 def startup():
@@ -254,7 +258,7 @@ def delete_admin(admin_id: int, session = Depends(require_admin)):
 def get_stats():
     db = get_db()
     result = {
-        "events":  db.execute("SELECT COUNT(*) FROM events WHERE is_active = 1").fetchone()[0],
+        "events":  db.execute("SELECT COUNT(*) FROM events WHERE status IN ('planned','active')").fetchone()[0],
         "cases":   db.execute("SELECT COUNT(*) FROM cases").fetchone()[0],
         "teams":   db.execute("SELECT COUNT(*) FROM teams").fetchone()[0],
         "members": db.execute("SELECT COUNT(*) FROM members").fetchone()[0],
@@ -263,14 +267,16 @@ def get_stats():
     return result
 
 @app.get("/events")
-def get_events():
+def get_events(all: int = 0):
     db = get_db()
-    rows = db.execute("""
+    where = "" if all else "WHERE e.status IN ('planned','active')"
+    rows = db.execute(f"""
         SELECT e.*, COUNT(c.id) AS cases_count
         FROM events e
         LEFT JOIN cases c ON c.event_id = e.id
-        WHERE e.is_active = 1
+        {where}
         GROUP BY e.id
+        ORDER BY e.id DESC
     """).fetchall()
     db.close()
     return [dict(r) for r in rows]
@@ -368,9 +374,9 @@ def create_team(data: TeamCreate):
     if not db.execute("SELECT id FROM users WHERE id = ?", (data.user_id,)).fetchone():
         db.close(); raise HTTPException(404, "Пользователь не найден")
 
-    event = db.execute("SELECT * FROM events WHERE id = ? AND is_active = 1", (data.event_id,)).fetchone()
+    event = db.execute("SELECT * FROM events WHERE id = ? AND status = 'planned'", (data.event_id,)).fetchone()
     if not event:
-        db.close(); raise HTTPException(404, "Мероприятие не найдено")
+        db.close(); raise HTTPException(404, "Мероприятие не найдено или регистрация закрыта")
 
     case = db.execute(
         "SELECT * FROM cases WHERE id = ? AND event_id = ?", (data.case_id, data.event_id)
@@ -550,10 +556,11 @@ def get_all_events(session = Depends(require_admin)):
 @app.post("/events")
 def create_event(data: EventCreate, session = Depends(require_admin)):
     db = get_db()
+    is_active = 0 if data.status == 'inactive' else 1
     try:
         db.execute(
-            "INSERT INTO events (title, description, slug, location, is_active) VALUES (?,?,?,?,?)",
-            (data.title, data.description, data.slug, data.location, data.is_active),
+            "INSERT INTO events (title, description, slug, location, status, start_date, is_active) VALUES (?,?,?,?,?,?,?)",
+            (data.title, data.description, data.slug, data.location, data.status, data.start_date, is_active),
         )
         db.commit()
         eid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -566,9 +573,10 @@ def create_event(data: EventCreate, session = Depends(require_admin)):
 @app.put("/events/{event_id}")
 def update_event(event_id: int, data: EventCreate, session = Depends(require_admin)):
     db = get_db()
+    is_active = 0 if data.status == 'inactive' else 1
     db.execute(
-        "UPDATE events SET title=?, slug=?, description=?, location=?, is_active=? WHERE id=?",
-        (data.title, data.slug, data.description, data.location, data.is_active, event_id),
+        "UPDATE events SET title=?, slug=?, description=?, location=?, status=?, start_date=?, is_active=? WHERE id=?",
+        (data.title, data.slug, data.description, data.location, data.status, data.start_date, is_active, event_id),
     )
     db.commit(); db.close()
     return {"message": "Обновлено"}
@@ -641,6 +649,33 @@ def get_all_teams(session = Depends(require_admin)):
     """).fetchall()
     db.close()
     return [dict(r) for r in rows]
+
+@app.get("/news")
+def get_news():
+    db   = get_db()
+    rows = db.execute("SELECT * FROM news ORDER BY id DESC").fetchall()
+    db.close()
+    return [dict(r) for r in rows]
+
+@app.post("/news")
+def create_news(data: NewsCreate, session = Depends(require_admin)):
+    if not data.text.strip():
+        raise HTTPException(400, "Текст новости не может быть пустым")
+    db = get_db()
+    db.execute("INSERT INTO news (text) VALUES (?)", (data.text.strip(),))
+    db.commit()
+    nid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    row = db.execute("SELECT * FROM news WHERE id = ?", (nid,)).fetchone()
+    db.close()
+    return dict(row)
+
+@app.delete("/news/{news_id}")
+def delete_news(news_id: int, session = Depends(require_admin)):
+    db = get_db()
+    db.execute("DELETE FROM news WHERE id = ?", (news_id,))
+    db.commit()
+    db.close()
+    return {"message": "Удалено"}
 
 @app.get("/admin/stats")
 def get_admin_stats(session = Depends(require_admin)):

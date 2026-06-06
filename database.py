@@ -83,7 +83,24 @@ def init_db():
             name       TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS news (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            text       TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     conn.commit()
+
+    # ── migrations ──────────────────────────────────────────────────────────
+    ev_cols = {r[1] for r in conn.execute("PRAGMA table_info(events)").fetchall()}
+    if 'status' not in ev_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN status TEXT DEFAULT 'active'")
+        conn.execute("UPDATE events SET status = 'inactive' WHERE is_active = 0")
+        conn.execute("UPDATE events SET status = 'active'   WHERE is_active = 1")
+        conn.commit()
+    if 'start_date' not in ev_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN start_date TEXT")
+        conn.commit()
 
     conn.close()
