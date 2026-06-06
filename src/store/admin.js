@@ -15,6 +15,7 @@ const mockCases       = cases
 const mockTeams       = ref([])
 const mockInviteCodes = ref([])
 const adminsList      = ref([])
+const newsList        = ref([])
 
 async function loginAdmin(email, password) {
   const res = await api.post('/admin/auth/login', { email, password })
@@ -120,6 +121,21 @@ function createCase(data)      { return createCaseStore(data) }
 function updateCase(id, data)  { return updateCaseStore(id, data) }
 function deleteCase(id)        { return deleteCaseStore(id) }
 
+async function fetchNews() {
+  const res      = await api.get('/news')
+  newsList.value = res.data
+}
+
+async function createNews(text) {
+  const res = await api.post('/news', { text })
+  newsList.value.unshift(res.data)
+}
+
+async function deleteNews(id) {
+  await api.delete(`/news/${id}`)
+  newsList.value = newsList.value.filter(n => n.id !== id)
+}
+
 async function fetchAdminStats() {
   const res = await api.get('/admin/stats')
   return res.data
@@ -150,11 +166,12 @@ function exportToCSV(data, filename) {
 
 export {
   admin, adminToken, pendingToken,
-  mockEvents, mockCases, mockTeams, mockInviteCodes, adminsList,
+  mockEvents, mockCases, mockTeams, mockInviteCodes, adminsList, newsList,
   loginAdmin, verifyTOTP, resendTOTP, logoutAdmin,
   fetchAdminsList, createAdminAccount, deleteAdminAccount,
   fetchAll, fetchTeams, fetchInviteCodes, generateInviteCode, addInviteCode,
   createEvent, updateEvent, deleteEvent,
   createCase, updateCase, deleteCase,
   fetchAdminStats, exportToCSV,
+  fetchNews, createNews, deleteNews,
 }

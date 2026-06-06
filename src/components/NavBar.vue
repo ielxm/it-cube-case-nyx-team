@@ -65,7 +65,7 @@ const router = useRouter()
 
 const tabs = [
   { to: '/',                          icon: 'mdi-web',               label: 'ГЛАВНАЯ'  },
-  { to: '/events/practice-2025-2026', icon: 'mdi-book-open-variant', label: 'СОБЫТИЯ'  },
+  { to: '/events/all', icon: 'mdi-book-open-variant', label: 'СОБЫТИЯ'  },
 ]
 
 function isActive(tab) {

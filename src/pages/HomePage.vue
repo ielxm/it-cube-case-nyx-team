@@ -14,7 +14,7 @@
           <v-btn color="secondary" variant="flat" size="large" to="/signup" rounded="sm">
             Зарегистрировать команду
           </v-btn>
-          <v-btn variant="outlined" size="large" to="/events/practice-2025-2026" rounded="sm" class="hero-btn-out">
+          <v-btn variant="outlined" size="large" to="/events/all" rounded="sm" class="hero-btn-out">
             Смотреть мероприятия
           </v-btn>
         </div>
@@ -71,12 +71,12 @@
                   v-for="ev in displayedEvents"
                   :key="ev.id || ev.slug"
                   class="event-row"
-                  @click="$router.push('/events/' + (ev.slug || 'practice-2025-2026'))"
+                  @click="$router.push('/events/' + (ev.slug || 'all'))"
                 >
                   <div class="event-header">
-                    <v-icon size="14" color="secondary" class="mr-1">mdi-calendar-star</v-icon>
+                    <v-icon size="14" :color="homeStatusColor(ev.status)" class="mr-1">{{ homeStatusIcon(ev.status) }}</v-icon>
                     <span class="event-title">{{ ev.name || ev.title }}</span>
-                    <v-chip color="success" variant="tonal" size="x-small" class="ml-2">ОТКРЫТО</v-chip>
+                    <v-chip :color="homeStatusColor(ev.status)" variant="tonal" size="x-small" class="ml-2">{{ homeStatusChip(ev.status) }}</v-chip>
                   </div>
                   <p class="event-desc">{{ ev.description }}</p>
                   <div class="event-footer">
@@ -88,7 +88,11 @@
                       <v-icon size="11">mdi-map-marker-outline</v-icon>
                       {{ ev.location || 'IT Cube' }}
                     </span>
-                    <a class="event-more" @click.stop="$router.push('/events/' + (ev.slug || 'practice-2025-2026'))">
+                    <span v-if="ev.status === 'planned' && ev.start_date" class="event-meta event-meta--date">
+                      <v-icon size="11">mdi-calendar-arrow-right</v-icon>
+                      {{ formatDate(ev.start_date) }}
+                    </span>
+                    <a class="event-more" @click.stop="$router.push('/events/' + (ev.slug || 'all'))">
                       Подробнее&nbsp;→
                     </a>
                   </div>
@@ -107,9 +111,10 @@
             <v-card-title class="pa-4 pb-2 card-section-title">Новости платформы</v-card-title>
             <v-divider />
             <v-card-text class="pa-3">
-              <div class="news-list">
+              <div v-if="news.length === 0" class="empty-msg py-2">Новостей пока нет</div>
+              <div v-else class="news-list">
                 <div v-for="n in news" :key="n.id" class="news-item">
-                  <a href="#" class="news-link">{{ n.text }}</a>
+                  <span class="news-link">{{ n.text }}</span>
                 </div>
               </div>
             </v-card-text>
@@ -230,12 +235,7 @@ const features = [
   { title: 'Управление для организаторов', body: 'Администраторы создают события, устанавливают лимиты и выгружают списки команд в один клик.' },
 ]
 
-const news = [
-  { id: 1, text: 'Открыта регистрация на IT Cube Case 2025–2026' },
-  { id: 2, text: 'Добавлены новые кейсы по машинному обучению' },
-  { id: 3, text: 'Обновление: доступна смена кейса команды' },
-  { id: 4, text: 'Итоги прошлогоднего соревнования опубликованы' },
-]
+const news = ref([])
 
 const statsRows = computed(() => [
   { label: 'Активных событий',  value: String(stats.value.events)             },
@@ -253,12 +253,14 @@ const steps = [
 
 onMounted(async () => {
   try {
-    const [evRes, stRes] = await Promise.all([
+    const [evRes, stRes, newsRes] = await Promise.all([
       api.get('/events'),
       api.get('/stats'),
+      api.get('/news'),
     ])
     localEvents.value = evRes.data
     stats.value = stRes.data
+    news.value  = newsRes.data
   } catch {
     localEvents.value = []
   } finally {
@@ -269,9 +271,25 @@ onMounted(async () => {
 const displayedEvents = computed(() => {
   if (localEvents.value.length > 0) return localEvents.value
   return events.value
-    .filter(e => e.status === 'active')
+    .filter(e => e.status === 'planned' || e.status === 'active')
     .map(e => ({ ...e, title: e.name || e.title }))
 })
+
+function homeStatusColor(s) {
+  return s === 'planned' ? 'success' : 'primary'
+}
+function homeStatusIcon(s) {
+  return s === 'planned' ? 'mdi-calendar-clock' : 'mdi-calendar-star'
+}
+function homeStatusChip(s) {
+  return s === 'planned' ? 'РЕГИСТРАЦИЯ' : 'ИДЁТ'
+}
+function formatDate(d) {
+  if (!d) return ''
+  const months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек']
+  const [y, m, day] = d.split('-')
+  return `${parseInt(day)} ${months[parseInt(m) - 1]} ${y}`
+}
 </script>
 
 <style scoped>
@@ -471,6 +489,8 @@ const displayedEvents = computed(() => {
 }
 
 .event-more:hover { text-decoration: underline; }
+
+.event-meta--date { color: #1a7a1a; font-weight: 600; }
 
 .empty-msg { color: var(--c-text-muted); font-size: 13px; }
 

@@ -44,6 +44,7 @@
           <v-tab value="stats">Статистика</v-tab>
           <v-tab value="teams">Команды</v-tab>
           <v-tab value="admins">Администраторы</v-tab>
+          <v-tab value="news">Новости</v-tab>
         </v-tabs>
 
         <v-window v-model="activeTab">
@@ -64,10 +65,15 @@
                   <v-card-text class="px-4">
                     <p class="card-meta mb-1"><strong>Slug:</strong> {{ ev.slug }}</p>
                     <p class="card-meta mb-1"><strong>Место:</strong> {{ ev.location }}</p>
-                    <p class="card-meta mb-3"><strong>Кейсов:</strong> {{ ev.cases_count }}</p>
-                    <v-chip :color="ev.is_active ? 'success' : 'warning'" variant="tonal" size="small">
-                      {{ ev.is_active ? 'Активно' : 'Неактивно' }}
-                    </v-chip>
+                    <p class="card-meta mb-2"><strong>Кейсов:</strong> {{ ev.cases_count }}</p>
+                    <div class="d-flex align-center gap-2 flex-wrap">
+                      <v-chip :color="evStatusColor(ev.status)" variant="tonal" size="small">
+                        {{ evStatusLabel(ev.status) }}
+                      </v-chip>
+                      <span v-if="ev.status === 'planned' && ev.start_date" class="card-meta">
+                        Начало: {{ formatDate(ev.start_date) }}
+                      </span>
+                    </div>
                   </v-card-text>
                   <v-card-actions class="px-4 pb-4">
                     <v-btn variant="text" color="secondary" size="small" @click="openEventDialog(ev)">
@@ -336,6 +342,73 @@
             </v-row>
           </v-window-item>
 
+          <!-- Новости -->
+          <v-window-item value="news">
+            <v-row>
+
+              <!-- Список -->
+              <v-col cols="12" md="7">
+                <v-card class="dash-card" :elevation="0">
+                  <v-card-title class="card-section-title pt-4 px-4">Новости платформы</v-card-title>
+                  <v-divider />
+                  <v-card-text class="pa-3">
+                    <div v-if="newsLoading" class="text-center py-6">
+                      <v-progress-circular indeterminate color="secondary" size="28" />
+                    </div>
+                    <div v-else-if="newsList.length === 0" class="text-center py-6 card-meta">
+                      Новостей пока нет
+                    </div>
+                    <div v-else class="admins-list">
+                      <div v-for="n in newsList" :key="n.id" class="admin-row">
+                        <div class="admin-row-info">
+                          <v-icon size="16" color="secondary" class="mr-2">mdi-newspaper-variant-outline</v-icon>
+                          <div>
+                            <div class="admin-name">{{ n.text }}</div>
+                            <div class="admin-email">{{ n.created_at?.slice(0, 10) }}</div>
+                          </div>
+                        </div>
+                        <div class="admin-row-actions">
+                          <v-btn icon size="x-small" variant="text" color="error" @click="doDeleteNews(n.id)">
+                            <v-icon size="15">mdi-trash-can</v-icon>
+                            <v-tooltip activator="parent" location="left">Удалить</v-tooltip>
+                          </v-btn>
+                        </div>
+                      </div>
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </v-col>
+
+              <!-- Добавить -->
+              <v-col cols="12" md="5">
+                <v-card class="dash-card" :elevation="0">
+                  <v-card-title class="card-section-title pt-4 px-4">Добавить новость</v-card-title>
+                  <v-divider />
+                  <v-card-text class="pa-4">
+                    <v-textarea
+                      v-model="newsForm.text"
+                      label="Текст новости"
+                      variant="outlined"
+                      rows="4"
+                      class="mb-4"
+                    />
+                    <v-alert v-if="newsError" type="error" variant="tonal" density="compact" class="mb-3">
+                      {{ newsError }}
+                    </v-alert>
+                    <v-btn
+                      color="secondary" variant="flat" rounded="sm" block
+                      :loading="newsCreating"
+                      @click="doCreateNews"
+                    >
+                      Добавить новость
+                    </v-btn>
+                  </v-card-text>
+                </v-card>
+              </v-col>
+
+            </v-row>
+          </v-window-item>
+
         </v-window>
       </v-container>
     </div>
@@ -353,10 +426,13 @@
           <v-text-field v-model="eventForm.slug"        label="Slug"      variant="outlined" density="comfortable" class="mb-3" />
           <v-text-field v-model="eventForm.location"    label="Место"     variant="outlined" density="comfortable" class="mb-3" />
           <v-textarea   v-model="eventForm.description" label="Описание"  variant="outlined" rows="3"              class="mb-3" />
-          <v-select v-model="eventForm.is_active"
-            :items="[{title:'Активно',value:1},{title:'Неактивно',value:0}]"
-            item-title="title" item-value="value"
-            label="Статус" variant="outlined" density="comfortable" />
+          <v-select v-model="eventForm.status"
+            :items="statusItems" item-title="title" item-value="value"
+            label="Статус" variant="outlined" density="comfortable" class="mb-3" />
+          <v-text-field v-if="eventForm.status === 'planned'"
+            v-model="eventForm.start_date"
+            label="Дата начала мероприятия"
+            type="date" variant="outlined" density="comfortable" />
         </v-card-text>
         <v-card-actions class="px-4 pb-4">
           <v-spacer />
@@ -430,13 +506,14 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  admin, mockEvents, mockCases, mockTeams, mockInviteCodes, adminsList,
+  admin, mockEvents, mockCases, mockTeams, mockInviteCodes, adminsList, newsList,
   logoutAdmin, fetchAll, fetchTeams,
   fetchInviteCodes, generateInviteCode, addInviteCode,
   createEvent, updateEvent, deleteEvent,
   createCase, updateCase, deleteCase,
   fetchAdminStats, exportToCSV,
   fetchAdminsList, createAdminAccount, deleteAdminAccount,
+  fetchNews, createNews, deleteNews,
 } from '../store/admin.js'
 
 const router = useRouter()
@@ -453,7 +530,7 @@ const showCaseDialog    = ref(false)
 const showAddCodeDialog = ref(false)
 const showDeleteConfirm = ref(false)
 
-const eventForm   = ref({ title: '', slug: '', description: '', location: 'IT Cube', is_active: 1 })
+const eventForm   = ref({ title: '', slug: '', description: '', location: 'IT Cube', status: 'planned', start_date: '' })
 const caseForm    = ref({ event_id: null, title: '', description: '', limit_teams: 8 })
 const addCodeForm = ref({ eventId: null, code: '' })
 
@@ -473,6 +550,11 @@ const adminLoadingList = ref(false)
 const adminCreating    = ref(false)
 const adminCreateError = ref('')
 const newAdmin         = ref({ name: '', email: '', password: '' })
+
+const newsLoading  = ref(false)
+const newsCreating = ref(false)
+const newsError    = ref('')
+const newsForm     = ref({ text: '' })
 
 const caseHeaders = [
   { title: 'Название',         key: 'title'       },
@@ -507,6 +589,7 @@ watch(activeTab, async val => {
   if (val === 'teams')   fetchTeams()
   if (val === 'stats')   loadStats()
   if (val === 'admins')  loadAdmins()
+  if (val === 'news')    loadNews()
 })
 
 async function loadCodes() {
@@ -526,13 +609,42 @@ async function loadAdmins() {
   adminLoadingList.value = false
 }
 
+async function loadNews() {
+  newsLoading.value = true
+  await fetchNews()
+  newsLoading.value = false
+}
+
+async function doCreateNews() {
+  newsError.value = ''
+  if (!newsForm.value.text.trim()) { newsError.value = 'Введите текст новости'; return }
+  newsCreating.value = true
+  try {
+    await createNews(newsForm.value.text)
+    newsForm.value = { text: '' }
+    showSnack('Новость добавлена')
+  } catch (e) {
+    newsError.value = e.response?.data?.detail || 'Ошибка при добавлении'
+  } finally { newsCreating.value = false }
+}
+
+async function doDeleteNews(id) {
+  if (!confirm('Удалить новость?')) return
+  try {
+    await deleteNews(id)
+    showSnack('Новость удалена')
+  } catch (e) {
+    showSnack('Ошибка при удалении')
+  }
+}
+
 function logout() { logoutAdmin(); router.push('/admin/login') }
 
 function openEventDialog(ev = null) {
   editingEvent.value = ev
   eventForm.value = ev
-    ? { title: ev.title, slug: ev.slug, description: ev.description, location: ev.location, is_active: ev.is_active }
-    : { title: '', slug: '', description: '', location: 'IT Cube', is_active: 1 }
+    ? { title: ev.title, slug: ev.slug, description: ev.description || '', location: ev.location, status: ev.status || 'planned', start_date: ev.start_date || '' }
+    : { title: '', slug: '', description: '', location: 'IT Cube', status: 'planned', start_date: '' }
   showEventDialog.value = true
 }
 
@@ -656,6 +768,25 @@ async function confirmDeleteAdmin(a) {
 function showSnack(msg) {
   snackMsg.value = msg
   snack.value    = true
+}
+
+const statusItems = [
+  { title: 'Запланировано (регистрация открыта)', value: 'planned'  },
+  { title: 'Активно (идёт)',                      value: 'active'   },
+  { title: 'Завершено',                           value: 'inactive' },
+]
+
+function evStatusColor(s) {
+  return s === 'planned' ? 'success' : s === 'active' ? 'primary' : 'warning'
+}
+function evStatusLabel(s) {
+  return { planned: 'Запланировано', active: 'Активно', inactive: 'Завершено' }[s] || 'Неизвестно'
+}
+function formatDate(d) {
+  if (!d) return ''
+  const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
+  const [y, m, day] = d.split('-')
+  return `${parseInt(day)} ${months[parseInt(m) - 1]} ${y}`
 }
 </script>
 
